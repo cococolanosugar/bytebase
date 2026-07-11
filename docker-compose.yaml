@@ -1,0 +1,55 @@
+services:
+  # PostgreSQL metadata database
+  pg:
+    image: postgres:16-alpine
+    container_name: bytebase-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bbdev
+      POSTGRES_DB: bbdev
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bbdev -d bbdev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # MySQL 5.7 test instance
+  mysql:
+    image: mysql:5.7
+    container_name: bytebase-mysql
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: testdb
+    volumes:
+      - mysqldata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot123"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Bytebase server
+  bytebase:
+    image: bytebase/bytebase:latest
+    container_name: bytebase
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PG_URL: postgresql://bbdev@pg:5432/bbdev?sslmode=disable
+    depends_on:
+      pg:
+        condition: service_healthy
+    volumes:
+      - bbdata:/var/opt/bytebase
+
+volumes:
+  pgdata:
+  bbdata:
+  mysqldata:
