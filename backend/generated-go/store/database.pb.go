@@ -1249,8 +1249,10 @@ type TriggerMetadata struct {
 	CollationConnection string `protobuf:"bytes,8,opt,name=collation_connection,json=collationConnection,proto3" json:"collation_connection,omitempty"`
 	Comment             string `protobuf:"bytes,9,opt,name=comment,proto3" json:"comment,omitempty"`
 	SkipDump            bool   `protobuf:"varint,10,opt,name=skip_dump,json=skipDump,proto3" json:"skip_dump,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// The show_create is the full SHOW CREATE TRIGGER output.
+	ShowCreate    string `protobuf:"bytes,11,opt,name=show_create,json=showCreate,proto3" json:"show_create,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TriggerMetadata) Reset() {
@@ -1344,6 +1346,13 @@ func (x *TriggerMetadata) GetSkipDump() bool {
 		return x.SkipDump
 	}
 	return false
+}
+
+func (x *TriggerMetadata) GetShowCreate() string {
+	if x != nil {
+		return x.ShowCreate
+	}
+	return ""
 }
 
 // RuleMetadata is the metadata for PostgreSQL rules.
@@ -1729,8 +1738,10 @@ type TableMetadata struct {
 	PrimaryKeyType string `protobuf:"bytes,23,opt,name=primary_key_type,json=primaryKeyType,proto3" json:"primary_key_type,omitempty"`
 	// The exclude_constraints is the list of EXCLUDE constraints in a table (PostgreSQL specific).
 	ExcludeConstraints []*ExcludeConstraintMetadata `protobuf:"bytes,25,rep,name=exclude_constraints,json=excludeConstraints,proto3" json:"exclude_constraints,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// The show_create is the full SHOW CREATE TABLE output.
+	ShowCreate    string `protobuf:"bytes,26,opt,name=show_create,json=showCreate,proto3" json:"show_create,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TableMetadata) Reset() {
@@ -1922,6 +1933,13 @@ func (x *TableMetadata) GetExcludeConstraints() []*ExcludeConstraintMetadata {
 		return x.ExcludeConstraints
 	}
 	return nil
+}
+
+func (x *TableMetadata) GetShowCreate() string {
+	if x != nil {
+		return x.ShowCreate
+	}
+	return ""
 }
 
 type CheckConstraintMetadata struct {
@@ -2538,7 +2556,9 @@ type ViewMetadata struct {
 	Triggers []*TriggerMetadata `protobuf:"bytes,6,rep,name=triggers,proto3" json:"triggers,omitempty"`
 	SkipDump bool               `protobuf:"varint,7,opt,name=skip_dump,json=skipDump,proto3" json:"skip_dump,omitempty"`
 	// The rules is the list of rules in a view (PostgreSQL specific).
-	Rules         []*RuleMetadata `protobuf:"bytes,8,rep,name=rules,proto3" json:"rules,omitempty"`
+	Rules []*RuleMetadata `protobuf:"bytes,8,rep,name=rules,proto3" json:"rules,omitempty"`
+	// The show_create is the full SHOW CREATE VIEW output.
+	ShowCreate    string `protobuf:"bytes,9,opt,name=show_create,json=showCreate,proto3" json:"show_create,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2627,6 +2647,13 @@ func (x *ViewMetadata) GetRules() []*RuleMetadata {
 		return x.Rules
 	}
 	return nil
+}
+
+func (x *ViewMetadata) GetShowCreate() string {
+	if x != nil {
+		return x.ShowCreate
+	}
+	return ""
 }
 
 // DependencyColumn is the metadata for dependency columns.

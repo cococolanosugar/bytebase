@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -514,12 +515,15 @@ func (d *Driver) SyncDBSchema(ctx context.Context) (*storepb.DatabaseSchemaMetad
 		return nil, util.FormatErrorWithQuery(err, viewQuery)
 	}
 	for key := range viewMap {
-		def, err := d.reconcileViewDefinition(ctx, d.databaseName, key.Table)
+		fullDDL, def, err := d.reconcileViewDefinition(ctx, d.databaseName, key.Table)
 		if err != nil {
 			return nil, err
 		}
 		if def != "" {
 			viewMap[key].Definition = def
+		}
+		if fullDDL != "" && strings.EqualFold(os.Getenv("USE_RAW_DIFF"), "true") {
+			viewMap[key].ShowCreate = fullDDL
 		}
 	}
 
@@ -527,6 +531,20 @@ func (d *Driver) SyncDBSchema(ctx context.Context) (*storepb.DatabaseSchemaMetad
 	triggerMap, err := d.getTriggerList(ctx, d.databaseName)
 	if err != nil {
 		return nil, err
+	}
+	// When USE_RAW_DIFF=true, capture SHOW CREATE TRIGGER output so the SDL diff
+	// path uses MySQL's authoritative DDL (Plan A).
+	if strings.EqualFold(os.Getenv("USE_RAW_DIFF"), "true") {
+		for _, triggers := range triggerMap {
+			for _, trigger := range triggers {
+				showCreate, err := d.getShowCreateTrigger(ctx, d.databaseName, trigger.Name)
+				if err != nil {
+					slog.Warn("failed to get SHOW CREATE TRIGGER", slog.String("trigger", trigger.Name), log.BBError(err))
+					continue
+				}
+				trigger.ShowCreate = showCreate
+			}
+		}
 	}
 
 	// Query events.
@@ -679,7 +697,43 @@ func (d *Driver) SyncDBSchema(ctx context.Context) (*storepb.DatabaseSchemaMetad
 		return nil, err
 	}
 
+	// When USE_RAW_DIFF=true, capture SHOW CREATE TABLE output so the SDL diff
+	// path can use MySQL's authoritative DDL (Plan A).
+	if strings.EqualFold(os.Getenv("USE_RAW_DIFF"), "true") {
+		for _, table := range schemaMetadata.Tables {
+			if table.SkipDump {
+				continue
+			}
+			showCreate, err := d.getShowCreateTable(ctx, d.databaseName, table.Name)
+			if err != nil {
+				slog.Warn("failed to get SHOW CREATE TABLE", slog.String("table", table.Name), log.BBError(err))
+				continue
+			}
+			table.ShowCreate = showCreate
+		}
+	}
+
 	return databaseMetadata, err
+}
+
+// getShowCreateTable runs SHOW CREATE TABLE and returns the full CREATE TABLE text.
+func (d *Driver) getShowCreateTable(ctx context.Context, databaseName, tableName string) (string, error) {
+	query := fmt.Sprintf("SHOW CREATE TABLE `%s`.`%s`", databaseName, tableName)
+	var unused, createStmt string
+	if err := d.db.QueryRowContext(ctx, query).Scan(&unused, &createStmt); err != nil {
+		return "", errors.Wrapf(err, "failed to execute SHOW CREATE TABLE `%s`.`%s`", databaseName, tableName)
+	}
+	return createStmt, nil
+}
+
+// getShowCreateTrigger runs SHOW CREATE TRIGGER and returns the full CREATE TRIGGER text.
+func (d *Driver) getShowCreateTrigger(ctx context.Context, databaseName, triggerName string) (string, error) {
+	query := fmt.Sprintf("SHOW CREATE TRIGGER `%s`.`%s`", databaseName, triggerName)
+	var unused, createStmt, unused2, unused3, unused4 string
+	if err := d.db.QueryRowContext(ctx, query).Scan(&unused, &createStmt, &unused2, &unused3, &unused4); err != nil {
+		return "", errors.Wrapf(err, "failed to execute SHOW CREATE TRIGGER `%s`.`%s`", databaseName, triggerName)
+	}
+	return createStmt, nil
 }
 
 func (d *Driver) getEventList(ctx context.Context, databaseName string) ([]*storepb.EventMetadata, error) {
@@ -1297,24 +1351,24 @@ func IsCurrentTimestampLike(s string) bool {
 	return false
 }
 
-func (d *Driver) reconcileViewDefinition(ctx context.Context, databaseName, viewName string) (string, error) {
+func (d *Driver) reconcileViewDefinition(ctx context.Context, databaseName, viewName string) (fullDDL string, def string, err error) {
 	query := fmt.Sprintf("SHOW CREATE VIEW `%s`.`%s`", databaseName, viewName)
 	var createStmt, unused string
 	if err := d.db.QueryRowContext(ctx, query).Scan(&unused, &createStmt, &unused, &unused); err != nil {
 		if noRows := errors.Is(err, sql.ErrNoRows); noRows {
 			slog.Warn("no rows return for query show create view", slog.String("viewName", viewName), slog.String("databaseName", databaseName))
-			return "", nil
+			return "", "", nil
 		}
-		return "", errors.Wrapf(err, "failed to scan row for query: %s", query)
+		return "", "", errors.Wrapf(err, "failed to scan row for query: %s", query)
 	}
 
-	def, err := getViewDefFromCreateView(createStmt)
+	def, err = getViewDefFromCreateView(createStmt)
 	if err != nil {
 		slog.Warn("failed to get view definition", slog.String("viewName", viewName), slog.String("databaseName", databaseName), log.BBError(err))
-		return "", nil
+		return createStmt, "", nil
 	}
 
-	return def, nil
+	return createStmt, def, nil
 }
 
 func getViewDefFromCreateView(createView string) (string, error) {

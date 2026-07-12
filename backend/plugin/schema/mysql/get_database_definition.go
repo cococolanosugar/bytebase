@@ -1595,6 +1595,11 @@ func getSDLFormat(metadata *storepb.DatabaseSchemaMetadata) (string, error) {
 
 	schema := metadata.Schemas[0]
 
+	// When USE_RAW_DIFF=true, prefer SHOW CREATE output over the dumper.
+	if raw := tryBuildRawSDL(metadata); raw != "" {
+		return raw, nil
+	}
+
 	tables := make([]*storepb.TableMetadata, 0, len(schema.Tables))
 	for _, table := range schema.Tables {
 		if table.SkipDump {

@@ -213,6 +213,9 @@ message TriggerMetadata {
   string comment = 9;
 
   bool skip_dump = 10;
+
+  // The show_create is the full SHOW CREATE TRIGGER output.
+  string show_create = 11;
 }
 
 // RuleMetadata is the metadata for PostgreSQL rules.
@@ -385,6 +388,9 @@ message TableMetadata {
 
   // The exclude_constraints is the list of EXCLUDE constraints in a table (PostgreSQL specific).
   repeated ExcludeConstraintMetadata exclude_constraints = 25;
+
+  // The show_create is the full SHOW CREATE TABLE output.
+  string show_create = 26;
 }
 
 message CheckConstraintMetadata {
@@ -608,6 +614,9 @@ message ViewMetadata {
 
   // The rules is the list of rules in a view (PostgreSQL specific).
   repeated RuleMetadata rules = 8;
+
+  // The show_create is the full SHOW CREATE VIEW output.
+  string show_create = 9;
 }
 
 // DependencyColumn is the metadata for dependency columns.
