@@ -1189,6 +1189,15 @@ func isAutoIncrement(column *storepb.ColumnMetadata) bool {
 	return strings.EqualFold(column.GetDefault(), autoIncrementSymbol)
 }
 
+// isTimestampColumnType reports whether a synced column-type spelling denotes a
+// TIMESTAMP column (with optional fractional-seconds precision). MySQL renders an
+// explicit NULL attribute for a nullable TIMESTAMP — the only data type it does this
+// for — so the dump must too, or omni's explicit_defaults_for_timestamp=OFF
+// canonicalizer forces the column NOT NULL on round-trip.
+func isTimestampColumnType(columnType string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(columnType)), "timestamp")
+}
+
 func printColumnClause(buf *strings.Builder, column *storepb.ColumnMetadata, table *storepb.TableMetadata) error {
 	if _, err := fmt.Fprintf(buf, "  `%s` %s", column.Name, normalizeColumnType(column.Type)); err != nil {
 		return err
@@ -1226,6 +1235,17 @@ func printColumnClause(buf *strings.Builder, column *storepb.ColumnMetadata, tab
 
 	if !column.Nullable {
 		if _, err := fmt.Fprint(buf, " NOT NULL"); err != nil {
+			return err
+		}
+	} else if isTimestampColumnType(column.Type) {
+		// MySQL always renders an explicit NULL attribute for a nullable TIMESTAMP
+		// column — SHOW CREATE and mysqldump emit `timestamp NULL ...`, the only
+		// type MySQL does this for, because under explicit_defaults_for_timestamp=OFF
+		// a bare TIMESTAMP is forced NOT NULL. omni's SDL loader keys nullable
+		// recognition on that explicit keyword (Column.NullExplicit); a dump written
+		// as bare `timestamp DEFAULT NULL` round-trips through omni's EDFT=OFF
+		// canonicalizer as `timestamp NOT NULL DEFAULT NULL`.
+		if _, err := fmt.Fprint(buf, " NULL"); err != nil {
 			return err
 		}
 	}
