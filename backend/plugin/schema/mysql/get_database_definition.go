@@ -1237,16 +1237,18 @@ func printColumnClause(buf *strings.Builder, column *storepb.ColumnMetadata, tab
 		if _, err := fmt.Fprint(buf, " NOT NULL"); err != nil {
 			return err
 		}
-	} else if isTimestampColumnType(column.Type) {
-		// MySQL always renders an explicit NULL attribute for a nullable TIMESTAMP
-		// column — SHOW CREATE and mysqldump emit `timestamp NULL ...`, the only
-		// type MySQL does this for, because under explicit_defaults_for_timestamp=OFF
-		// a bare TIMESTAMP is forced NOT NULL. omni's SDL loader keys nullable
-		// recognition on that explicit keyword (Column.NullExplicit); a dump written
-		// as bare `timestamp DEFAULT NULL` round-trips through omni's EDFT=OFF
-		// canonicalizer as `timestamp NOT NULL DEFAULT NULL`.
-		if _, err := fmt.Fprint(buf, " NULL"); err != nil {
-			return err
+	} else {
+		if isTimestampColumnType(column.Type) {
+			// MySQL always renders an explicit NULL attribute for a nullable TIMESTAMP
+			// column — SHOW CREATE and mysqldump emit `timestamp NULL ...`, the only
+			// type MySQL does this for, because under explicit_defaults_for_timestamp=OFF
+			// a bare TIMESTAMP is forced NOT NULL. omni's SDL loader keys nullable
+			// recognition on that explicit keyword (Column.NullExplicit); a dump written
+			// as bare `timestamp DEFAULT NULL` round-trips through omni's EDFT=OFF
+			// canonicalizer as `timestamp NOT NULL DEFAULT NULL`.
+			if _, err := fmt.Fprint(buf, " NULL"); err != nil {
+				return err
+			}
 		}
 	}
 
