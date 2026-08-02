@@ -646,6 +646,13 @@ func writeColumnDefinitionBody(buf *strings.Builder, column *storepb.ColumnMetad
 
 	if !column.Nullable {
 		_, _ = buf.WriteString(" NOT NULL")
+	} else {
+		if isTimestampColumnType(column.Type) {
+			// MySQL's canonical form renders an explicit NULL for a nullable TIMESTAMP
+			// (see printColumnClause); a bare `timestamp DEFAULT NULL` is invalid on an
+			// explicit_defaults_for_timestamp=OFF server.
+			_, _ = buf.WriteString(" NULL")
+		}
 	}
 
 	// Spatial SRID (MySQL 8.0): after NOT NULL, before DEFAULT — the SDL dumper's

@@ -370,3 +370,44 @@ func TestLoadCatalogFallbackSeedsExplicitDefaultsForTimestamp(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, sql80, "8.0 source/target with identical bare TIMESTAMP must not phantom-diff; got %q", sql80)
 }
+
+// TestSDLDumpNullableTimestampRoundTrip guards the nullable-TIMESTAMP dump fix: the SDL
+// dump of a synced `deleted_time timestamp DEFAULT NULL` column must emit MySQL's
+// canonical explicit NULL attribute (`timestamp NULL DEFAULT NULL`), and a 5.7 (EDFT OFF)
+// omni migration generated from that dump must keep the column nullable.
+//
+// Regression: the dump previously wrote a bare `timestamp DEFAULT NULL`; omni's loader
+// records nullability from the explicit NULL/NOT NULL keyword (Column.NullExplicit) and
+// its explicit_defaults_for_timestamp=OFF canonicalizer forced the bare TIMESTAMP to NOT
+// NULL while still emitting the declared default, re-creating the table as
+// `timestamp NOT NULL DEFAULT NULL`.
+func TestSDLDumpNullableTimestampRoundTrip(t *testing.T) {
+	col := func(name, tp string, nullable bool, def string) *storepb.ColumnMetadata {
+		return &storepb.ColumnMetadata{Name: name, Type: tp, Nullable: nullable, Default: def, Comment: name}
+	}
+	table := &storepb.TableMetadata{
+		Name:    "a",
+		Engine:  "InnoDB",
+		Charset: "utf8mb4",
+		Columns: []*storepb.ColumnMetadata{
+			col("id", "bigint(20)", false, "AUTO_INCREMENT"),
+			col("deleted_time", "timestamp", true, "NULL"),
+		},
+		Indexes: []*storepb.IndexMetadata{{Name: "PRIMARY", Primary: true, Expressions: []string{"id"}}},
+	}
+	meta := model.NewDatabaseMetadata(
+		&storepb.DatabaseSchemaMetadata{Schemas: []*storepb.SchemaMetadata{{Name: "", Tables: []*storepb.TableMetadata{table}}}},
+		nil, nil, storepb.Engine_MYSQL, false,
+	)
+
+	sdl, err := schema.MetadataToSDL(storepb.Engine_MYSQL, meta)
+	require.NoError(t, err)
+	require.Contains(t, sdl, "`deleted_time` timestamp NULL DEFAULT NULL")
+	require.NotContains(t, sdl, "timestamp NOT NULL DEFAULT NULL")
+
+	// 5.7 (EDFT OFF) is the target that used to flip the column to NOT NULL.
+	migration, err := mysqlDiffSDLMigration("", sdl, "5.7.25")
+	require.NoError(t, err)
+	require.Contains(t, migration, "`deleted_time` timestamp NULL DEFAULT NULL")
+	require.NotContains(t, migration, "timestamp NOT NULL DEFAULT NULL")
+}
