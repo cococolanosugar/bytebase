@@ -755,6 +755,10 @@ function ChangelogSelector({
         const db = useAppStore.getState().getDatabaseByName(database);
         const changelog = mockLatestChangelog(db);
         items = [{ name: changelog.name, date: undefined, planTitle: "" }];
+      }else {
+        const db = useAppStore.getState().getDatabaseByName(database);
+        const changelog = mockLatestChangelog(db);
+        items = [{ name: changelog.name, date: undefined, planTitle: "" }, ...items];
       }
 
       setEntries(items);
